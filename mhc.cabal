@@ -1,0 +1,53 @@
+cabal-version:
+  >=1.10
+
+name:
+  mhc
+version:
+  0.1.0
+synopsis:
+  Secret project, top-secret
+description:
+  A very top-secret project, don't look
+bug-reports:
+  https://github.com/felixmulder/mhc
+license:
+  BSD-3-Clause
+license-file:
+  LICENSE
+author:
+  Felix Mulder
+maintainer:
+  felix.mulder@gmail.com
+copyright:
+  Felix Mulder
+category:
+  compiler
+build-type:
+  Simple
+extra-source-files:
+  CHANGELOG.md
+  README.md
+
+executable mhc
+  main-is:
+    Main.hs
+  build-depends:
+      base >=4.12 && <4.13
+    , compiler
+  hs-source-dirs:
+    app
+  default-language:
+    Haskell2010
+
+library compiler
+  exposed-modules:
+    MHC.Compiler
+  -- other-modules:
+  -- other-extensions:
+  build-depends:
+      base >=4.12 && <4.13
+  hs-source-dirs:
+    compiler
+  default-language:
+    Haskell2010
