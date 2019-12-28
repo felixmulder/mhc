@@ -1,6 +1,6 @@
 module Main where
 
-import qualified MHC.Compiler as Compiler (main)
+import qualified Compiler (main)
 
 main :: IO ()
 main = Compiler.main
