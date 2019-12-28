@@ -12,7 +12,7 @@ description:
 bug-reports:
   https://github.com/felixmulder/mhc
 license:
-  BSD-3-Clause
+  BSD3
 license-file:
   LICENSE
 author:
@@ -32,22 +32,89 @@ extra-source-files:
 executable mhc
   main-is:
     Main.hs
+
   build-depends:
-      base >=4.12 && <4.13
+      base        >=4.12  && <4.13
     , compiler
+
   hs-source-dirs:
     app
+
   default-language:
     Haskell2010
 
 library compiler
+  default-extensions:
+    BlockArguments
+    DerivingStrategies
+    FlexibleContexts
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    NoImplicitPrelude
+    OverloadedStrings
+
+  ghc-options:
+    -Wall -Wredundant-constraints -fhide-source-paths -threaded
+
   exposed-modules:
-    MHC.Compiler
-  -- other-modules:
-  -- other-extensions:
+    Compiler
+    Lexer
+    Lexer.Util
+    Lexer.Types
+    Parser
+    Parser.ModuleHeader
+    Source
+
   build-depends:
-      base >=4.12 && <4.13
+      base        >=4.12  && <4.13
+    , bytestring  >=0.10  && <0.11
+    , comonad     >=5.0   && <5.1
+    , ghc         >=8.6   && <8.7
+    , text        >=1.2   && <1.3
+    , mtl         >=2.2   && <2.3
+    , trifecta    >=2.1   && <2.2
+    , parsers     >=0.12  && <0.13
+
   hs-source-dirs:
     compiler
+
   default-language:
     Haskell2010
+
+test-suite unit-tests
+  type:
+    exitcode-stdio-1.0
+
+  default-language:
+    Haskell2010
+
+  main-is:
+    Main.hs
+
+  ghc-options:
+    -Wall -Wredundant-constraints -fhide-source-paths -threaded
+
+  hs-source-dirs:
+    unit-tests
+
+  other-modules:
+
+  default-extensions:
+    BlockArguments
+    DerivingStrategies
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    NoImplicitPrelude
+    OverloadedStrings
+
+  build-depends:
+      compiler
+
+    , base        >=4.12  && <4.13
+    , bytestring  >=0.10  && <0.11
+    , directory   >=1.3   && <1.4
+    , hedgehog    >=1.0   && <1.1
+    , text        >=1.2   && <1.3
+    , trifecta    >=2.1   && <2.2
+    , process     >=1.6   && <1.7
+    , utf8-string >=1.0   && <1.1
