@@ -1,6 +1,6 @@
-[submodule "corpus/lens"]
-	path = corpus/lens
-	url = git@github.com:ekmett/lens.git
 [submodule "corpus/servant"]
 	path = corpus/servant
 	url = git@github.com:haskell-servant/servant.git
+[submodule "corpus/lens"]
+	path = corpus/lens
+	url = git@github.com:ekmett/lens.git
