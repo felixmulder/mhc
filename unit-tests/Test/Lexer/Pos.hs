@@ -124,4 +124,64 @@ despan = fmap go
 -- | All source directories that are being lexed in this project currently
 sourceDirs :: [FilePath]
 sourceDirs =
+  localProject ++
+  lens ++
+  servant ++
   []
+
+localProject :: [FilePath]
+localProject =
+  [ "./unit-tests/lexer/pos/"
+  , "./unit-tests/Test/"
+  , "./unit-tests/Test/Parser/"
+  , "./unit-tests/Test/Parser/ModuleHeader/"
+  , "./unit-tests/Test/Lexer/"
+  , "./app/"
+  , "./compiler/"
+  , "./compiler/Lexer/"
+  , "./compiler/Parser/"
+  ]
+
+lens :: [FilePath]
+lens = fmap ("./corpus/lens/src/" <>) $
+  [ "Control/"
+  , "Control/Exception/"
+  , "Control/Lens/"
+  , "Control/Lens/Internal/"
+  , "Control/Monad/", "Control/Monad/Error/"
+  , "Control/Parallel/", "Control/Parallel/Strategies/"
+  , "Control/Seq/"
+  , "Data/"
+  , "Data/Array/"
+  , "Data/Bits/"
+  , "Data/ByteString/", "Data/ByteString/Lazy/", "Data/ByteString/Strict/"
+  , "Data/Complex/"
+  , "Data/Data/"
+  , "Data/Dynamic/"
+  , "Data/HashSet/"
+  , "Data/IntSet/"
+  , "Data/List/"
+  , "Data/Map/"
+  , "Data/Sequence/"
+  , "Data/Set/"
+  , "Data/Text/", "Data/Text/Lazy/", "Data/Text/Strict/"
+  , "Data/Tree/"
+  , "Data/Typeable/"
+  , "Data/Vector/"
+  , "Data/Vector/Generic/"
+  , "GHC/"
+  , "GHC/Generics/"
+  , "Language/", "Language/Haskell/", "Language/Haskell/TH/"
+  , "Numeric/", "Numeric/Natural/"
+  , "System/", "System/Exit/", "System/FilePath/", "System/IO/", "System/IO/Error/"
+  ]
+
+servant :: [FilePath]
+servant = fmap ("./corpus/servant/servant/src/" <>) $
+  [ "Servant/"
+  , "Servant/API/", "Servant/API/Experimental/", "Servant/API/Internal/"
+  , "Servant/API/Internal/Test/"
+  , "Servant/Test/"
+  , "Servant/Types/"
+  , "Servant/Utils/"
+  ]
