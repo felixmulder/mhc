@@ -98,6 +98,8 @@ test-suite unit-tests
     unit-tests
 
   other-modules:
+    Test.Lexer.Pos
+    Test.Util
 
   default-extensions:
     BlockArguments
