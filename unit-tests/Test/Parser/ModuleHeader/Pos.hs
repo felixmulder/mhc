@@ -68,6 +68,9 @@ fileProps dir = do
     -- Reads a file and applies the CPP
     readFileCPP :: FilePath -> IO ByteString
     readFileCPP fp = do
+      -- FIXME:
+      --   Using `cpp` here for darwin works but is not 1:1 with GHC
+      --   Usage of `gcc` here is broken
       let pp = if "darwin" `isPrefixOf` os then "cpp" else "gcc"
       readProcess pp ["-E", "-traditional", "-w", fp] ""
         <&> unlines . drop 7 . lines
