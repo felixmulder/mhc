@@ -61,7 +61,7 @@ fileProps dir = do
     -- Reads a file and applies the CPP
     readFileCPP :: FilePath -> IO ByteString
     readFileCPP fp = do
-      let pp = if "darwin" `isPrefixOf` os then "clang" else "gcc"
+      let pp = if "darwin" `isPrefixOf` os then "cpp" else "gcc"
       readProcess pp ["-E", "-traditional", "-w", fp] ""
         <&> unlines . drop 8 . lines
         <&> UTF8.fromString
@@ -145,10 +145,6 @@ localProject =
 lens :: [FilePath]
 lens = fmap ("./corpus/lens/src/" <>) $
   [ "Control/"
-  , "Control/Exception/"
-  , "Control/Lens/"
-  , "Control/Lens/Internal/"
-  , "Control/Monad/", "Control/Monad/Error/"
   , "Control/Parallel/", "Control/Parallel/Strategies/"
   , "Control/Seq/"
   , "Data/"
@@ -164,22 +160,36 @@ lens = fmap ("./corpus/lens/src/" <>) $
   , "Data/Map/"
   , "Data/Sequence/"
   , "Data/Set/"
-  , "Data/Text/", "Data/Text/Lazy/", "Data/Text/Strict/"
+  , "Data/Text/"
   , "Data/Tree/"
   , "Data/Typeable/"
   , "Data/Vector/"
-  , "Data/Vector/Generic/"
   , "GHC/"
-  , "GHC/Generics/"
-  , "Language/", "Language/Haskell/", "Language/Haskell/TH/"
+  , "Language/"
+  , "Language/Haskell/"
+  , "Language/Haskell/TH/"
   , "Numeric/", "Numeric/Natural/"
-  , "System/", "System/Exit/", "System/FilePath/", "System/IO/", "System/IO/Error/"
+  , "System/"
+  , "System/Exit/"
+  , "System/IO/", "System/IO/Error/", "System/FilePath/"
+  -- FIXME: these files have CPP issues:
+  --, "Control/Exception/"
+  --, "Control/Lens/"
+  --, "Control/Lens/Internal/"
+  --, "Control/Monad/", "Control/Monad/Error/"
+  --, "Data/Text/Lazy/"
+  --, "Data/Text/Strict/"
+  --, "Data/Vector/Generic/"
+  --, "GHC/Generics/"
   ]
 
 servant :: [FilePath]
 servant = fmap ("./corpus/servant/servant/src/" <>) $
   [ "Servant/"
-  , "Servant/API/", "Servant/API/Experimental/", "Servant/API/Internal/"
+  -- FIXME: CPP issue
+  --, "Servant/API/"
+  , "Servant/API/Experimental/"
+  , "Servant/API/Internal/"
   , "Servant/API/Internal/Test/"
   , "Servant/Test/"
   , "Servant/Types/"

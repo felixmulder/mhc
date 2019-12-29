@@ -15,6 +15,7 @@ data Token
   | TokAt
   | TokBacktick
   | TokComma
+  | TokHash
   | TokLBrace
   | TokLBracket
   | TokLParen
@@ -23,6 +24,7 @@ data Token
   | TokRBracket
   | TokRParen
   | TokSymChar Char
+  | TokTick
   -- Identifiers
   | TokUpperName String
   | TokLowerName String

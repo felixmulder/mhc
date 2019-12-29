@@ -40,8 +40,8 @@ tokens = do
   pure $ t : (s0 ++ toList c ++ s1)
   where
     token :: Parser Token
-    token = try simpleSymbol
-        <|> try literal
+    token = try literal
+        <|> try simpleSymbol
         <|> try keyword
         <|> try upperCasedName
         <|> try lowerCasedName
@@ -55,7 +55,7 @@ upperCasedName = do
 lowerCasedName :: Parser Token
 lowerCasedName = do
   c    <- choice [char '_', lower]
-  rest <- many (alphaNum <|> char '_' <|> char '\'')
+  rest <- many (alphaNum <|> char '_' <|> char '\'' <|> char '#')
   pure $ TokLowerName (c : rest)
 
 
@@ -71,7 +71,9 @@ simpleSymbol = choice
   , TokRBrace   <$  char '}'
   , TokRBracket <$  char ']'
   , TokRParen   <$  char ')'
-  , TokSymChar  <$> oneOf "&*$/+-<>=.:~\\?"
+  , TokTick     <$  char '\''
+  , TokHash     <$  char '#'
+  , TokSymChar  <$> oneOf "^&*$/+-<>=.:~\\?!%"
   ] <?> "operator"
 
 literal :: Parser Token
