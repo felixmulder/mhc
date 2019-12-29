@@ -29,10 +29,10 @@ import           Hedgehog
 import           System.Directory
 import           System.Info (os)
 import           System.Process (readProcess)
+import           Text.Trifecta (Result(..), Spanned(..))
 
 import           Lexer (lex)
 import           Lexer.Types (Token(..))
-import           Text.Trifecta (Result(..), Spanned(..))
 import           Test.Util (exampleProperty)
 
 tests :: IO Bool

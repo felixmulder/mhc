@@ -84,6 +84,7 @@ literal = choice
 keyword :: Parser Token
 keyword = choice
   [ TokAs        <$ string "as"
+  , TokData      <$ string "data"
   , TokClass     <$ string "class"
   , TokDeriving  <$ string "deriving"
   , TokDo        <$ string "do"

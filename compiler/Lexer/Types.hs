@@ -33,6 +33,7 @@ data Token
   -- Keywords
   | TokAs
   | TokClass
+  | TokData
   | TokDeriving
   | TokDo
   | TokForall

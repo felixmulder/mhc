@@ -99,6 +99,7 @@ test-suite unit-tests
 
   other-modules:
     Test.Lexer.Pos
+    Test.Parser.ModuleHeader.Pos
     Test.Util
 
   default-extensions:
@@ -108,15 +109,17 @@ test-suite unit-tests
     LambdaCase
     NoImplicitPrelude
     OverloadedStrings
+    RecordWildCards
 
   build-depends:
       compiler
 
     , base        >=4.12  && <4.13
     , bytestring  >=0.10  && <0.11
+    , comonad     >=5.0   && <5.1
     , directory   >=1.3   && <1.4
     , hedgehog    >=1.0   && <1.1
+    , process     >=1.6   && <1.7
     , text        >=1.2   && <1.3
     , trifecta    >=2.1   && <2.2
-    , process     >=1.6   && <1.7
     , utf8-string >=1.0   && <1.1
