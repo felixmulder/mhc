@@ -1,5 +1,9 @@
 module Lexer.Types
   ( Token(..)
+  , anyTokSpace
+  , anyTokUpper
+  , anyTokLower
+  , tokDot
   ) where
 
 import           Prelude
@@ -48,3 +52,19 @@ data Token
   | TokWhere
   deriving stock (Eq, Show)
 
+-----------------------------------------------------------------------------
+--
+-- Placeholder tokens to illustrate expected tokens
+--
+-----------------------------------------------------------------------------
+anyTokSpace :: Token
+anyTokSpace = TokSpace 137
+
+anyTokUpper :: Token
+anyTokUpper = TokUpperName "<any>"
+
+anyTokLower :: Token
+anyTokLower = TokLowerName "<any>"
+
+tokDot :: Token
+tokDot = TokSymChar '.'

@@ -55,9 +55,9 @@ upperCasedName = do
 lowerCasedName :: Parser Token
 lowerCasedName = do
   c    <- choice [char '_', lower]
-  rest <- many (alphaNum <|> char '_' <|> char '\'' <|> char '#')
-  pure $ TokLowerName (c : rest)
-
+  rest <- many (alphaNum <|> char '_' <|> char '\'')
+  ending <- try . optional $ char '#'
+  pure $ TokLowerName $ (c : rest) ++ toList ending
 
 simpleSymbol :: Parser Token
 simpleSymbol = choice

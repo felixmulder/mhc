@@ -3,25 +3,31 @@ module Parser.ModuleHeader
   , Import(..)
   , ModuleHeader(..)
   , ModuleName(..)
-  , ParserErrors(..)
-  , ParserError(..)
 
   , parseModuleHeader
   ) where
 
 import           Prelude hiding (span)
-import           Control.Monad.Identity (Identity, runIdentity)
-import           Control.Monad.State (MonadState(..), StateT, evalStateT)
-import           Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
-import           Data.Function ((&))
+import           Control.Applicative ((<|>), optional, many)
+import           Data.Foldable (toList)
 import           Data.Text (Text)
-import qualified Data.Text as Text (pack, splitOn)
-import           Text.Trifecta (Spanned(..))
+import qualified Data.Text as Text (pack)
+import           Text.Trifecta (Span, Spanned(..))
 
-import           Lexer.Types (Token(..))
+import           Lexer.Types (Token(..), tokDot, anyTokSpace, anyTokUpper, anyTokLower)
+import           Parser.TreeParser (MonadTreeParser(..), TreeParser, ParserErrors)
+import           Parser.TreeParser (ParserError(..))
+import           Parser.TreeParser (parseError, runTreeParser, try, acceptAnySpace)
 
 data ModuleName = ModuleName [Text] Text
   deriving stock (Eq, Show)
+
+instance Semigroup ModuleName where
+  ModuleName xs1 n1 <> ModuleName xs2 n2 =
+    ModuleName (xs1 <> [n1] <> xs2) n2
+
+addSuffix :: ModuleName -> Text -> ModuleName
+addSuffix (ModuleName xs n1) = ModuleName (xs <> [n1])
 
 data Export
   = ExportIdentifier Text
@@ -33,100 +39,80 @@ data Import = Import
 
 data ModuleHeader = ModuleHeader
   { moduleName :: Spanned ModuleName
-  , exports :: [Spanned Export]
-  , imports :: [Spanned Import]
+  , exports    :: [Spanned Export]
+  , imports    :: [Spanned Import]
+  , docstring  :: Maybe Docstring
   }
   deriving stock (Eq, Show)
 
--- | Non-Empty list of parser errors
-data ParserErrors = ParserErrors ParserError [ParserError]
-  deriving stock (Show, Eq)
-
--- | Parser Error
-data ParserError
-  = NoTokensLeft
-  | ExpectedModuleName (Spanned Token)
-  | MismatchedToken Token (Spanned Token)
-  deriving stock (Show, Eq)
-
-newtype TreeParserT m a =
-  TreeParserT { unTreeParserT :: StateT [Spanned Token] (ExceptT ParserErrors m) a }
-  deriving (Applicative, Functor, Monad, MonadState [Spanned Token], MonadError ParserErrors)
-
-type TreeParser = TreeParserT Identity
-
-class Monad m => MonadTreeParser m where
-  -- | Gets the current token and pops it from the state
-  getToken :: m (Spanned Token)
-  -- | Peek at next token, does not modify state
-  peekToken :: m (Spanned Token)
-  -- | Accept token, error if token mismatch
-  accept :: Token -> m ()
-  ---- | Get the current position as a 'Span'
-  --getPosition :: m Span
-  -- | Skips whitespace until first non-whitespace token
-  skipWhitespace :: m ()
-  skipWhitespace = peekToken >>= \case
-    TokSpace _ :~ _ -> getToken *> skipWhitespace
-    TokCrlf :~ _    -> getToken *> skipWhitespace
-    _               -> pure ()
-
-instance Monad m => MonadTreeParser (TreeParserT m) where
-  getToken = get >>= \case
-    t : rest -> put rest >> return t
-    [] -> throwError (ParserErrors NoTokensLeft [])
-
-  peekToken = get >>= \case
-    t : _ -> pure t
-    [] -> noTokensLeft
-
-  accept expected = get >>= \case
-    actual :~ _ : rest
-      | actual == expected -> put rest
-      | otherwise -> noTokensLeft
-    [] -> noTokensLeft
-
-  --getPosition = get >>= \case
-  --  (_ :~ pos) : _ -> pure pos
-  --  [] -> noTokensLeft
-
-parseError :: MonadError ParserErrors m => ParserError -> m a
-parseError = throwError . flip ParserErrors []
-
-noTokensLeft :: MonadError ParserErrors m => m a
-noTokensLeft = throwError $ ParserErrors NoTokensLeft []
-
-runTreeParser :: TreeParser a -> [Spanned Token] -> Either ParserErrors a
-runTreeParser parser tokens
-  = runIdentity
-  . runExceptT
-  $ evalStateT (unTreeParserT parser) tokens
-
-parseModuleHeader :: [Spanned Token] -> Either ParserErrors ModuleHeader
-parseModuleHeader = runTreeParser parseModuleHeader'
+newtype Docstring = Docstring Text
+  deriving newtype (Eq, Show)
 
 -- | Parsing a module header from tokens
---
---   TODO:
---   - Preceding comments
---   - Export list
---   - Import list
-parseModuleHeader' :: TreeParser ModuleHeader
-parseModuleHeader' = do
-  skipWhitespace >> accept TokModule >> skipWhitespace
-  name <- expectModuleName
-  pure $ ModuleHeader name [] []
+parseModuleHeader :: [Spanned Token] -> Either ParserErrors ModuleHeader
+parseModuleHeader = runTreeParser $ do
+  skipWhitespace
+  doc <- parseDocstring
+  accept TokModule >> skipWhitespace
+  ModuleHeader
+    <$> parseModuleName
+    <*> parseExports
+    <*> parseImports
+    <*> pure doc
+
+-- | FIXME: currently discards docstring
+parseDocstring :: TreeParser (Maybe Docstring)
+parseDocstring = peekToken >>= \case
+  TokBlockComment _ :~ _ -> skipToken >> skipWhitespace >> parseDocstring
+  TokLineComment _  :~ _ -> skipToken >> skipWhitespace >> parseDocstring
+  _other                 -> pure Nothing
+
+parseModuleName :: TreeParser (Spanned ModuleName)
+parseModuleName = getToken >>= \case
+  TokUpperName n :~ span ->
+    consumeModuleName span span (ModuleName [] $ Text.pack n) <* skipWhitespace
+  other -> parseError (MismatchedToken anyTokUpper other)
+  where
+    consumeModuleName :: Span -> Span -> ModuleName -> TreeParser (Spanned ModuleName)
+    consumeModuleName start end modName = peekToken >>= \case
+      TokSpace _     :~ span -> modName :~ (start <> end <> span) <$ skipToken
+      TokCrlf        :~ span -> modName :~ (start <> end <> span) <$ skipToken
+      TokSymChar '.' :~ span ->
+        skipToken >> acceptUpperName \name newEnd ->
+          consumeModuleName (start <> end <> span) newEnd (modName `addSuffix` name)
+      other ->
+        parseError $ ExpectedOtherToken [anyTokSpace, TokCrlf, tokDot] other
+    acceptUpperName :: (Text -> Span -> TreeParser a) -> TreeParser a
+    acceptUpperName f = getToken >>= \case
+      TokUpperName n :~ span -> f (Text.pack n) span
+      other -> parseError (MismatchedToken anyTokUpper other)
+
+parseExports :: TreeParser [Spanned Export]
+parseExports = do
+  accept TokLParen >> skipWhitespace
+  first <- many . try $ commad <* skipWhitespace
+  lastM <- optional (try exported <* skipWhitespace)
+  accept TokRParen >> acceptAnySpace >> skipWhitespace
+  accept TokWhere >> skipWhitespace
+  pure (first ++ toList lastM)
 
   where
-    toModuleName :: String -> ModuleName
-    toModuleName s = Text.pack s & Text.splitOn "." & listToModuleName []
+    commad :: TreeParser (Spanned Export)
+    commad = exported <* skipWhitespace <* accept TokComma
 
-    listToModuleName prefix (name : []) = ModuleName (reverse prefix) name
-    listToModuleName prefix (name : rest) = listToModuleName (name : prefix) rest
-    listToModuleName _prefix [] = error "BUG! Empty module name made it through lexing"
+    exported :: TreeParser (Spanned Export)
+    exported = try exportedLower
+           <|> exportedUpper
 
-    expectModuleName :: TreeParser (Spanned ModuleName)
-    expectModuleName = getToken >>= \case
-      TokUpperName n :~ span -> pure $ toModuleName n :~ span
-      other                  -> parseError (ExpectedModuleName other)
+    exportedLower :: TreeParser (Spanned Export)
+    exportedLower = getToken >>= \case
+      TokLowerName n :~ span -> pure $ ExportIdentifier (Text.pack n) :~ span
+      other                  -> parseError (MismatchedToken anyTokLower other)
 
+    exportedUpper :: TreeParser (Spanned Export)
+    exportedUpper = getToken >>= \case
+      TokUpperName n :~ span -> pure $ ExportIdentifier (Text.pack n) :~ span
+      other                  -> parseError (MismatchedToken anyTokUpper other)
+
+parseImports :: TreeParser [Spanned Import]
+parseImports = pure []

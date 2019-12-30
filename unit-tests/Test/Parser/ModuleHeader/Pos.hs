@@ -16,25 +16,28 @@ module Test.Parser.ModuleHeader.Pos
   ( tests
   ) where
 
-import           Prelude hiding (lex)
+import           Prelude hiding (lex, span)
 
+import           Control.Lens ((^.))
 import           Control.Monad (join, filterM)
 import           Control.Comonad (extract)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.UTF8 as UTF8 (fromString)
 import           Data.Functor ((<&>))
 import           Data.List (isPrefixOf)
+import qualified Data.List as List (intercalate)
 import           Data.String (fromString)
 import           GHC.Stack (HasCallStack, withFrozenCallStack)
 import           Hedgehog
 import           System.Directory
 import           System.Info (os)
 import           System.Process (readProcess)
-import           Text.Trifecta (Result(..), Spanned)
+import           Text.Trifecta (Result(..), Span(..), Spanned, span)
+import           Text.Trifecta.Delta (Delta(..))
 
 import           Lexer (lex)
 import           Lexer.Types (Token)
-import           Parser.ModuleHeader (ModuleHeader(..), ModuleName(..))
+import           Parser.ModuleHeader (ModuleHeader(..), ModuleName(..), Export(..))
 import           Parser.ModuleHeader (parseModuleHeader)
 import           Test.Util (exampleProperty)
 
@@ -50,7 +53,7 @@ fileProps dir = do
   fmap lexFile <$> filterM doesFileExist filesAndDirs
   where
     lexFile :: HasCallStack => FilePath -> (PropertyName, Property)
-    lexFile fp = withFrozenCallStack $ (name, prop)
+    lexFile fp = withFrozenCallStack (name, prop)
       where
         name = fromString ("Parse module header in file " <> fp)
         prop = withFrozenCallStack $ exampleProperty do
@@ -61,9 +64,13 @@ fileProps dir = do
             Left errs -> do
               footnote $ "Failed to parse module header in file: " <> fp
               footnote . show $ errs
-              footnote $ "From tokens:" <> show tokens
+              footnote $ "From tokens:" <> showTokens tokens
               footnote $ "File contents:\n" <> show fileContents
               failure
+        showTokens
+          = (\xs -> "\n  [ " <> xs <> " ]")
+          . List.intercalate ",\n    "
+          . fmap (show . extract)
 
     -- Reads a file and applies the CPP
     readFileCPP :: FilePath -> IO ByteString
@@ -76,6 +83,44 @@ fileProps dir = do
         <&> unlines . drop 7 . lines
         <&> UTF8.fromString
 
+prop_parse_examples :: Property
+prop_parse_examples = exampleProperty do
+  headerFrom "module Main ( \n ) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName [] "Main"
+    fmap extract exports === []
+
+  headerFrom "module Main.Party (  foo , ) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName ["Main"] "Party"
+    fmap extract exports === [ExportIdentifier "foo"]
+
+  headerFrom "module Main.Party.Central (  foo , ) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName ["Main", "Party"] "Central"
+    fmap extract exports === [ExportIdentifier "foo"]
+
+  headerFrom "module Main (  foo , bar ) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName [] "Main"
+    fmap extract exports === [ExportIdentifier "foo", ExportIdentifier "bar"]
+
+  headerFrom "module Main (  foo , bar, ) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName [] "Main"
+    fmap extract exports === fmap ExportIdentifier ["foo", "bar"]
+
+  headerFrom "module Main (\n  Foo,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName [] "Main"
+    fmap extract exports === fmap ExportIdentifier ["Foo", "Bar"]
+
+  -- This test makes sure that adding spans together for getting the
+  -- appropriate location works as expected
+  headerFrom "module Main.Foo (\n  Foo,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+    moduleName ^. span === Span (Columns 7 7) (Columns 16 16) "module Main.Foo (\n"
+
+headerFrom :: HasCallStack => ByteString -> PropertyT IO ModuleHeader
+headerFrom bs = withFrozenCallStack $ lexThrow bs <&> parseModuleHeader >>= \case
+  Right header -> pure header
+  Left errs -> do
+    footnote . show $ errs
+    failure
+
 lexThrow :: ByteString -> PropertyT IO [Spanned Token]
 lexThrow e = withFrozenCallStack $ case lex e of
   Success tokens -> pure tokens
@@ -83,19 +128,14 @@ lexThrow e = withFrozenCallStack $ case lex e of
       footnote . show $ errs
       failure
 
-prop_parse_simplest :: Property
-prop_parse_simplest = exampleProperty $ do
-  lexThrow "module Main () where" <&> parseModuleHeader >>= \case
-    Right ModuleHeader{..} -> do
-      extract moduleName === ModuleName [] "Main"
-      exports === []
-      imports === []
-    Left errs -> do
-      footnote . show $ errs
-      failure
-
 sourceDirs :: [FilePath]
 sourceDirs =
-  [ "./unit-tests/"
-  , "./unit-tests/Test/"
+  [ "./unit-tests/Test/"
+  , "./unit-tests/Test/Parser/"
+  , "./unit-tests/Test/Parser/ModuleHeader/"
+  , "./unit-tests/Test/Lexer/"
+  , "./app/"
+  --, "./compiler/"
+  --, "./compiler/Lexer/"
+  --, "./compiler/Parser/"
   ]
