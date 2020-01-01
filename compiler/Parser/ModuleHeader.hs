@@ -26,9 +26,6 @@ instance Semigroup ModuleName where
   ModuleName xs1 n1 <> ModuleName xs2 n2 =
     ModuleName (xs1 <> [n1] <> xs2) n2
 
-addSuffix :: ModuleName -> Text -> ModuleName
-addSuffix (ModuleName xs n1) = ModuleName (xs <> [n1])
-
 data Export
   = ExportIdentifier Text
   | ExportModule Text
@@ -70,23 +67,45 @@ parseDocstring = peekToken >>= \case
 parseModuleName :: TreeParser (Spanned ModuleName)
 parseModuleName = getToken >>= \case
   TokUpperName n :~ span ->
-    consumeModuleName span span (ModuleName [] $ Text.pack n) <* skipWhitespace
+    consumeModuleName span span (Text.pack n) <* skipWhitespace
   other -> parseError (MismatchedToken anyTokUpper other)
   where
-    consumeModuleName :: Span -> Span -> ModuleName -> TreeParser (Spanned ModuleName)
-    consumeModuleName start end modName = peekToken >>= \case
-      TokSpace _     :~ span -> modName :~ (start <> end <> span) <$ skipToken
-      TokCrlf        :~ span -> modName :~ (start <> end <> span) <$ skipToken
-      TokSymChar '.' :~ span ->
-        skipToken >> acceptUpperName \name newEnd ->
-          consumeModuleName (start <> end <> span) newEnd (modName `addSuffix` name)
-      other ->
-        parseError $ ExpectedOtherToken [anyTokSpace, TokCrlf, tokDot] other
+    consumeModuleName :: Span -> Span -> Text -> TreeParser (Spanned ModuleName)
+    consumeModuleName start end n = do
+      (prefix, name) :~ span <- qualifiedIdent start end [] n
+      pure $ ModuleName prefix name :~ span
+
+qualifiedIdent :: Span -> Span -> [Text] -> Text -> TreeParser (Spanned ([Text], Text))
+qualifiedIdent start end prefix name = peekToken >>= \case
+  TokSpace _     :~ span -> (prefix, name) :~ (start <> end <> span) <$ skipToken
+  TokCrlf        :~ span -> (prefix, name) :~ (start <> end <> span) <$ skipToken
+  TokSymChar '.' :~ span ->
+    skipToken >> acceptUpperName \newName newEnd ->
+      qualifiedIdent (start <> end <> span) newEnd (prefix ++ [name]) newName
+  other ->
+    parseError $ ExpectedOtherToken [anyTokSpace, TokCrlf, tokDot] other
+  where
     acceptUpperName :: (Text -> Span -> TreeParser a) -> TreeParser a
     acceptUpperName f = getToken >>= \case
       TokUpperName n :~ span -> f (Text.pack n) span
       other -> parseError (MismatchedToken anyTokUpper other)
 
+-- | Parses exports from a module
+--
+--   Examples:
+--
+--   @
+--   fooBar,
+--   FooBar,
+--   TODO:
+--   Foo.Bar,
+--   Foo.bar,
+--   A(B, C, D),
+--   A.B(A.C, A,D),
+--   A.B(..),
+--   module A.B,
+--   module A.B(X),
+--   @
 parseExports :: TreeParser [Spanned Export]
 parseExports = do
   accept TokLParen >> skipWhitespace
@@ -101,7 +120,7 @@ parseExports = do
     commad = exported <* skipWhitespace <* accept TokComma
 
     exported :: TreeParser (Spanned Export)
-    exported = try exportedLower
+    exported = exportedLower
            <|> exportedUpper
 
     exportedLower :: TreeParser (Spanned Export)
