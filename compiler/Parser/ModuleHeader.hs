@@ -17,7 +17,7 @@ import           Text.Trifecta (Span, Spanned(..))
 import           Lexer.Types (Token(..), tokDot, anyTokSpace, anyTokUpper, anyTokLower)
 import           Parser.TreeParser (MonadTreeParser(..), TreeParser, ParserErrors)
 import           Parser.TreeParser (ParserError(..))
-import           Parser.TreeParser (parseError, runTreeParser, try, acceptAnySpace)
+import           Parser.TreeParser (parseError, runTreeParser, acceptAnySpace)
 
 data ModuleName = ModuleName [Text] Text
   deriving stock (Eq, Show)
@@ -109,8 +109,8 @@ qualifiedIdent start end prefix name = peekToken >>= \case
 parseExports :: TreeParser [Spanned Export]
 parseExports = do
   accept TokLParen >> skipWhitespace
-  first <- many . try $ commad <* skipWhitespace
-  lastM <- optional (try exported <* skipWhitespace)
+  first <- many (commad <* skipWhitespace)
+  lastM <- optional (exported <* skipWhitespace)
   accept TokRParen >> acceptAnySpace >> skipWhitespace
   accept TokWhere >> skipWhitespace
   pure (first ++ toList lastM)

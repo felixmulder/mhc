@@ -6,7 +6,6 @@ module Parser.TreeParser
   , ParserError(..)
   , runTreeParser
   , parseError
-  , try
 
   , acceptAnySpace
   ) where
@@ -87,19 +86,6 @@ instance Monad m => MonadTreeParser (TreeParserT m) where
   --getPosition = get >>= \case
   --  (_ :~ pos) : _ -> pure pos
   --  [] -> noTokensLeft
-
--- | Runs the tree parser, but resets the parser to the state it was in before
---   attempting to run the parser
---
---   Usage:
---    try a <|> b
-try :: TreeParser a -> TreeParser a
-try ma = get >>= \tokens ->
-  case runTreeParser' ma tokens of
-    Left err ->
-      put tokens >> throwError err
-    Right (a, newTokens) ->
-      put newTokens >> pure a
 
 acceptAnySpace :: TreeParser ()
 acceptAnySpace = getToken >>= \case
