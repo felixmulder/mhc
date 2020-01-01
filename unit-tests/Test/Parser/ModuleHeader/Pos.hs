@@ -91,23 +91,31 @@ prop_parse_examples = exampleProperty do
 
   headerFrom "module Main.Party (  foo , ) where" >>= \ModuleHeader{..} -> do
     extract moduleName === ModuleName ["Main"] "Party"
-    fmap extract exports === [ExportIdentifier "foo"]
+    fmap extract exports === [ExportIdent [] "foo"]
 
   headerFrom "module Main.Party.Central (  foo , ) where" >>= \ModuleHeader{..} -> do
     extract moduleName === ModuleName ["Main", "Party"] "Central"
-    fmap extract exports === [ExportIdentifier "foo"]
+    fmap extract exports === [ExportIdent [] "foo"]
 
   headerFrom "module Main (  foo , bar ) where" >>= \ModuleHeader{..} -> do
     extract moduleName === ModuleName [] "Main"
-    fmap extract exports === [ExportIdentifier "foo", ExportIdentifier "bar"]
+    fmap extract exports === fmap (ExportIdent []) ["foo", "bar"]
 
   headerFrom "module Main (  foo , bar, ) where" >>= \ModuleHeader{..} -> do
     extract moduleName === ModuleName [] "Main"
-    fmap extract exports === fmap ExportIdentifier ["foo", "bar"]
+    fmap extract exports === fmap (ExportIdent []) ["foo", "bar"]
 
   headerFrom "module Main (\n  Foo,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
     extract moduleName === ModuleName [] "Main"
-    fmap extract exports === fmap ExportIdentifier ["Foo", "Bar"]
+    fmap extract exports === fmap (ExportIdent []) ["Foo", "Bar"]
+
+  headerFrom "module Main (\n  Foo.bar,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName [] "Main"
+    fmap extract exports === [ExportIdent ["Foo"] "bar", ExportIdent [] "Bar"]
+
+  headerFrom "module Main (\n  Foo.bar,\n  Bar.Bar,\n) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName [] "Main"
+    fmap extract exports === [ExportIdent ["Foo"] "bar", ExportIdent ["Bar"] "Bar"]
 
   -- This test makes sure that adding spans together for getting the
   -- appropriate location works as expected

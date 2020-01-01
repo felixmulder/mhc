@@ -4,6 +4,7 @@ module Lexer.Types
   , anyTokUpper
   , anyTokLower
   , tokDot
+  , isWhitespace
   ) where
 
 import           Prelude
@@ -68,3 +69,9 @@ anyTokLower = TokLowerName "<any>"
 
 tokDot :: Token
 tokDot = TokSymChar '.'
+
+isWhitespace :: Token -> Bool
+isWhitespace = \case
+  TokCrlf    -> True
+  TokSpace _ -> True
+  _          -> False
