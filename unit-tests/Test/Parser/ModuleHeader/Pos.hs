@@ -25,6 +25,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.UTF8 as UTF8 (fromString)
 import           Data.Functor ((<&>))
 import           Data.List (isPrefixOf)
+import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List as List (intercalate)
 import           Data.String (fromString)
 import           GHC.Stack (HasCallStack, withFrozenCallStack)
@@ -37,7 +38,8 @@ import           Text.Trifecta.Delta (Delta(..))
 
 import           Lexer (lex)
 import           Lexer.Types (Token)
-import           Parser.ModuleHeader (ModuleHeader(..), ModuleName(..), Export(..))
+import           Parser.ModuleHeader (ModuleHeader(..), ModuleName(..), ModuleExport(..))
+import           Parser.ModuleHeader (DataMembers(..), QualifiedName(..))
 import           Parser.ModuleHeader (parseModuleHeader)
 import           Test.Util (exampleProperty)
 
@@ -86,36 +88,56 @@ fileProps dir = do
 prop_parse_examples :: Property
 prop_parse_examples = exampleProperty do
   headerFrom "module Main ( \n ) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName [] "Main"
+    extract moduleName === ModuleName (QualifiedName [] "Main")
     fmap extract exports === []
 
   headerFrom "module Main.Party (  foo , ) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName ["Main"] "Party"
-    fmap extract exports === [ExportIdent [] "foo"]
+    extract moduleName === ModuleName (QualifiedName ["Main"] "Party")
+    fmap extract exports === [MkIdent "foo"]
 
   headerFrom "module Main.Party.Central (  foo , ) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName ["Main", "Party"] "Central"
-    fmap extract exports === [ExportIdent [] "foo"]
+    extract moduleName === ModuleName (QualifiedName ["Main", "Party"] "Central")
+    fmap extract exports === [MkIdent "foo"]
 
   headerFrom "module Main (  foo , bar ) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName [] "Main"
-    fmap extract exports === fmap (ExportIdent []) ["foo", "bar"]
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === fmap MkIdent ["foo", "bar"]
 
   headerFrom "module Main (  foo , bar, ) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName [] "Main"
-    fmap extract exports === fmap (ExportIdent []) ["foo", "bar"]
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === fmap MkIdent ["foo", "bar"]
 
   headerFrom "module Main (\n  Foo,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName [] "Main"
-    fmap extract exports === fmap (ExportIdent []) ["Foo", "Bar"]
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === fmap MkProperName ["Foo", "Bar"]
 
-  headerFrom "module Main (\n  Foo.bar,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName [] "Main"
-    fmap extract exports === [ExportIdent ["Foo"] "bar", ExportIdent [] "Bar"]
+  headerFrom "module Main (\n  Foo() ,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === [MkDataExport "Foo" OnlyType, MkProperName "Bar"]
 
-  headerFrom "module Main (\n  Foo.bar,\n  Bar.Bar,\n) where" >>= \ModuleHeader{..} -> do
-    extract moduleName === ModuleName [] "Main"
-    fmap extract exports === [ExportIdent ["Foo"] "bar", ExportIdent ["Bar"] "Bar"]
+  headerFrom "module Main (\n  Foo( ) ,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === [MkDataExport "Foo" OnlyType, MkProperName "Bar"]
+
+  headerFrom "module Main (\n  Foo(..) ,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === [MkDataExport "Foo" Wildcard, MkProperName "Bar"]
+
+  headerFrom "module Main (\n  Foo(Foo, Bar, Baz) ,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === [ MkDataExport "Foo" (Members $ "Foo" :| ["Bar", "Baz"])
+                             , MkProperName "Bar"
+                             ]
+
+  -- TODO: Let's forget about re-exports for now
+  --headerFrom "module Main (\n  Foo.bar,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
+  --  extract moduleName === ModuleName [] "Main"
+  --  fmap extract exports === [MkIdent ["Foo"] "bar", MkIdent "Bar"]
+
+  -- TODO: Let's forget about re-exports for now
+  --headerFrom "module Main (\n  Foo.bar,\n  Bar.Bar,\n) where" >>= \ModuleHeader{..} -> do
+  --  extract moduleName === ModuleName [] "Main"
+  --  fmap extract exports === [ExportIdent ["Foo"] "bar", ExportIdent ["Bar"] "Bar"]
 
   -- This test makes sure that adding spans together for getting the
   -- appropriate location works as expected

@@ -16,7 +16,7 @@ import           Control.Monad (void)
 import           Control.Monad.Identity (Identity, runIdentity)
 import           Control.Monad.State (MonadState(..), StateT(..))
 import           Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
-import           Text.Trifecta (Spanned(..))
+import           Text.Trifecta (Span, Spanned(..))
 
 import           Lexer.Types (Token(..), anyTokSpace)
 
@@ -56,7 +56,7 @@ class Monad m => MonadTreeParser m where
   -- | Skip the next token
   skipToken :: m ()
   -- | Accept token, error if token mismatch
-  accept :: Token -> m ()
+  accept :: Token -> m Span
   ---- | Get the current position as a 'Span'
   --getPosition :: m Span
   -- | Skips whitespace until first non-whitespace token
@@ -78,8 +78,8 @@ instance Monad m => MonadTreeParser (TreeParserT m) where
   skipToken = void getToken
 
   accept expected = get >>= \case
-    (token@(actual :~ _) : rest)
-      | actual == expected -> put rest
+    (token@(actual :~ sp) : rest)
+      | actual == expected -> sp <$ put rest
       | otherwise -> parseError $ MismatchedToken expected token
     [] -> noTokensLeft
 
