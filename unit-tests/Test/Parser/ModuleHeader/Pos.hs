@@ -165,7 +165,7 @@ sourceDirs =
   , "./unit-tests/Test/Parser/ModuleHeader/"
   , "./unit-tests/Test/Lexer/"
   , "./app/"
-  --, "./compiler/"
-  --, "./compiler/Lexer/"
-  --, "./compiler/Parser/"
+  , "./compiler/"
+  , "./compiler/Lexer/"
+  , "./compiler/Parser/"
   ]
