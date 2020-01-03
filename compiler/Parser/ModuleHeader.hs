@@ -181,21 +181,12 @@ parseExports = do
     exportedLower = peekToken >>= \case
       TokLowerName n :~ span ->
         MkIdent (Ident n) :~ span <$ skipToken
-      --TokUpperName n :~ span ->
-      --  skipToken >> qualifiedLower span span [] n
       other                  ->
         parseError (MismatchedToken anyTokLower other)
 
     exportedUpper :: TreeParser (Spanned ProperName)
     exportedUpper = getToken >>= \case
       TokUpperName n :~ span -> pure $ ProperName n :~ span
-      --TokUpperName n :~ span -> peekToken >>= \case
-      --  token :~ _ | isWhitespace token || token == TokComma || token == TokRParen ->
-      --    pure $ MkIdent (Ident n) :~ span
-      --  TokSymChar '.' :~ _ ->
-      --    qualifiedUpper span span [] n
-      --  other ->
-      --    parseError $ ExpectedOtherToken [tokDot, TokComma, TokRParen, anyTokSpace, TokCrlf] other
       other                  ->
         parseError (MismatchedToken anyTokUpper other)
 
@@ -238,33 +229,6 @@ parseExports = do
       case (fmap extract $ first <> toList lastM, spanRes) of
         (x : xs, Just memberSpans) -> pure $ Members (x :| xs) :~ (start <> memberSpans <> end)
         (_, _) -> parseError $ DebugError "Members couldn't be parsed from export list"
-
-
-{--
-qualifiedLower :: Span -> Span -> [Text] -> Text -> TreeParser (Spanned ModuleExport)
-qualifiedLower start end prefix name =
-  accept tokDot >> peekToken >>= \case
-    TokLowerName n :~ span ->
-      ExportIdent (prefix ++ [name]) n :~ (start <> end <> span) <$ skipToken
-    TokUpperName n :~ span ->
-      skipToken >> qualifiedLower (start <> end) span (prefix ++ [name]) n
-    other ->
-      parseError $ ExpectedOtherToken [anyTokUpper, anyTokLower] other
-
-qualifiedUpper :: Span -> Span -> [Text] -> Text -> TreeParser (Spanned Export)
-qualifiedUpper start end prefix name =
-  accept tokDot >> getToken >>= \case
-    TokUpperName n :~ span ->
-      peekToken >>= \case
-        token :~ _ | isWhitespace token || token == TokComma || token == TokRParen ->
-          pure $ ExportIdent (prefix ++ [name]) n :~ (start <> end <> span)
-        TokSymChar '.' :~ _ ->
-          qualifiedUpper (start <> end) span (prefix ++ [name]) n
-        other ->
-          parseError $ ExpectedOtherToken [tokDot, TokComma, TokRParen, anyTokSpace, TokCrlf] other
-    other ->
-      parseError $ ExpectedOtherToken [anyTokUpper, anyTokSpace, TokCrlf] other
---}
 
 parseImports :: TreeParser [Spanned Import]
 parseImports = pure []
