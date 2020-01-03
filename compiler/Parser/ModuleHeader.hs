@@ -16,7 +16,7 @@ import           Data.Foldable (toList)
 import           Data.List (foldl')
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.String (IsString)
-import           Data.Text (Text)
+import           Data.Text (Text, pack)
 import           Text.Trifecta (Span, Spanned(..))
 
 import           Lexer.Types (Token(..))
@@ -41,6 +41,7 @@ newtype ModuleName = ModuleName (QualifiedName ProperName ProperName)
 
 data ModuleExport
   = MkIdent Ident
+  | MkSymbol Ident
   | MkProperName ProperName
   | MkDataExport ProperName DataMembers
   deriving stock (Eq, Show)
@@ -118,10 +119,11 @@ qualifiedIdent start end prefix name = peekToken >>= \case
 --   @
 --   fooBar,
 --   FooBar,
---   TODO:
+--   A.B(),
 --   A(B, C, D),
---   A.B(A.C, A,D),
 --   A.B(..),
+--   TODO:
+--   A.B(A.C, A,D),
 --   Foo.bar,
 --   Foo.Bar,
 --   module A.B,
@@ -143,10 +145,37 @@ parseExports = do
     exported :: TreeParser (Spanned ModuleExport)
     exported = exportedLower
            <|> exportedData
+           <|> exportedSymbol
            <|> fmap (mapValue MkProperName) exportedUpper
 
     mapValue :: (a -> b) -> Spanned a -> Spanned b
     mapValue f (a :~ span) = f a :~ span
+
+    exportedSymbol :: TreeParser (Spanned ModuleExport)
+    exportedSymbol = do
+      let
+        acceptSymchar = getToken >>= \case
+          TokSymChar c :~ span -> pure $ c :~ span
+          TokPipe      :~ span -> pure $ '|' :~ span
+          other                -> parseError $ ExpectedSymchar other
+
+      start <- accept TokLParen
+      syms  <- many acceptSymchar
+      end   <- accept TokRParen
+
+      let
+        spanToSpan (Just acc) s = Just (acc <> s)
+        spanToSpan Nothing _ = Nothing
+        spanRes =
+          case fmap (\(_ :~ span) -> span) syms of
+            (x : xs) -> foldl' spanToSpan (Just x) xs
+            []       -> Nothing
+
+      case (fmap extract syms, spanRes) of
+        (x : xs, Just symSpan) -> pure $
+          MkSymbol (Ident $ pack (x : xs)) :~ (start <> symSpan <> end)
+        (_, _) -> parseError $
+          DebugError "Symbol couldn't be parsed from export list"
 
     exportedLower :: TreeParser (Spanned ModuleExport)
     exportedLower = peekToken >>= \case

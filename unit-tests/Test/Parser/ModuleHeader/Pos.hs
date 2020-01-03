@@ -107,6 +107,10 @@ prop_parse_examples = exampleProperty do
     extract moduleName === ModuleName (QualifiedName [] "Main")
     fmap extract exports === fmap MkIdent ["foo", "bar"]
 
+  headerFrom "module Main (  (<>), (<~), ) where" >>= \ModuleHeader{..} -> do
+    extract moduleName === ModuleName (QualifiedName [] "Main")
+    fmap extract exports === fmap MkSymbol ["<>", "<~"]
+
   headerFrom "module Main (\n  Foo,\n  Bar,\n) where" >>= \ModuleHeader{..} -> do
     extract moduleName === ModuleName (QualifiedName [] "Main")
     fmap extract exports === fmap MkProperName ["Foo", "Bar"]
@@ -160,6 +164,13 @@ lexThrow e = withFrozenCallStack $ case lex e of
 
 sourceDirs :: [FilePath]
 sourceDirs =
+  localProject ++
+  lens ++
+  servant ++
+  []
+
+localProject :: [FilePath]
+localProject =
   [ "./unit-tests/Test/"
   , "./unit-tests/Test/Parser/"
   , "./unit-tests/Test/Parser/ModuleHeader/"
@@ -168,4 +179,74 @@ sourceDirs =
   , "./compiler/"
   , "./compiler/Lexer/"
   , "./compiler/Parser/"
+  ]
+
+lens :: [FilePath]
+lens = fmap ("./corpus/lens/src/" <>) $
+  [ "Control/Parallel/", "Control/Parallel/Strategies/"
+  , "Control/Seq/"
+  , "Data/"
+  , "Data/Bits/"
+  , "Data/ByteString/", "Data/ByteString/Lazy/", "Data/ByteString/Strict/"
+  , "Data/Complex/"
+  , "Data/Dynamic/"
+  , "Data/HashSet/"
+  , "Data/IntSet/"
+  , "Data/List/"
+  , "Data/Map/"
+  , "Data/Sequence/"
+  , "Data/Set/"
+  , "Data/Text/"
+  , "Data/Tree/"
+  , "Data/Typeable/"
+  , "GHC/"
+  , "Language/"
+  , "Language/Haskell/"
+  , "System/", "System/Exit/", "System/IO/"
+
+  -- FIXME: comments parsed incorrectly:
+  --, "Data/Array/"
+  --, "Data/Data/"
+  --, "Data/Vector/"
+  --, "Numeric/", "Numeric/Natural/"
+  --, "System/FilePath/"
+
+  -- FIXME: re-exports
+  --, "Control/"
+
+  -- FIXME: Infinite loop?
+  --, "Language/Haskell/TH/"
+
+  -- FIXME: System.IO.Error has no explicit exports
+  --, "System/IO/Error/"
+
+  -- FIXME: these files have CPP issues:
+  --, "Control/Exception/"
+  --, "Control/Lens/"
+  --, "Control/Lens/Internal/"
+  --, "Control/Monad/", "Control/Monad/Error/"
+  --, "Data/Text/Lazy/"
+  --, "Data/Text/Strict/"
+  --, "Data/Vector/Generic/"
+  --, "GHC/Generics/"
+  ]
+
+servant :: [FilePath]
+servant = fmap ("./corpus/servant/servant/src/" <>) $
+  [ "Servant/API/Internal/"
+
+  -- FIXME: comments parsed incorrectly:
+  --, "Servant/API/Internal/Test/"
+  --, "Servant/Utils/"
+
+  -- FIXME: re-exports:
+  -- "Servant/"
+
+  -- FIXME: no explicit exports:
+  --, "Servant/API/Experimental/"
+  --, "Servant/Test/"
+  --, "Servant/Types/"
+
+  -- FIXME: CPP issue
+  --, "Servant/API/"
   ]

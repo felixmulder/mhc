@@ -27,6 +27,7 @@ data ParserError
   = NoTokensLeft
   | ExpectedModuleName (Spanned Token)
   | ExpectedOtherToken [Token] (Spanned Token)
+  | ExpectedSymchar (Spanned Token)
   | MismatchedToken Token (Spanned Token)
   | DebugError String
   deriving stock (Show, Eq)
