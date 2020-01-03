@@ -9,6 +9,7 @@ import           Control.Monad (join)
 import           Data.ByteString (ByteString)
 import           Data.Foldable (toList)
 import           Data.Functor ((<&>))
+import           Data.Text (pack)
 import           Text.Trifecta hiding (token, spaces)
 
 import           Lexer.Util (charLit, strLit, intLit)
@@ -50,14 +51,14 @@ upperCasedName :: Parser Token
 upperCasedName = do
   c <- upper
   rest <- many (alphaNum <|> char '_')
-  pure $ TokUpperName (c : rest)
+  pure . TokUpperName $ pack (c : rest)
 
 lowerCasedName :: Parser Token
 lowerCasedName = do
   c    <- choice [char '_', lower]
   rest <- many (alphaNum <|> char '_' <|> char '\'')
   ending <- try . optional $ char '#'
-  pure $ TokLowerName $ (c : rest) ++ toList ending
+  pure $ TokLowerName $ pack $ (c : rest) ++ toList ending
 
 simpleSymbol :: Parser Token
 simpleSymbol = choice
@@ -79,7 +80,7 @@ simpleSymbol = choice
 literal :: Parser Token
 literal = choice
   [ TokCharLit    <$> charLit
-  , TokStringLit  <$> strLit
+  , TokStringLit . pack <$> strLit
   , TokIntegerLit <$> intLit
   ] <?> "literal"
 
@@ -117,12 +118,12 @@ comment =
 lineComment :: Parser Token
 lineComment = do
   contents <- string "--" >> many (noneOf "\r\n")
-  pure $ TokLineComment $ "--" ++ contents
+  pure $ TokLineComment $ pack $ "--" ++ contents
 
 blockComment :: Parser Token
 blockComment = do
   contents <- string "{-" >> anyChar `manyTill` commentEnd
-  pure $ TokBlockComment $ reconstructed $ contents
+  pure $ TokBlockComment $ pack $ reconstructed $ contents
   where
     commentEnd = try $ string "-}"
     reconstructed c = "{-" ++ c ++ "-}"

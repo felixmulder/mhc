@@ -11,7 +11,6 @@ import           Prelude hiding (span)
 import           Control.Applicative ((<|>), optional, many)
 import           Data.Foldable (toList)
 import           Data.Text (Text)
-import qualified Data.Text as Text (pack)
 import           Text.Trifecta (Span, Spanned(..))
 
 import           Lexer.Types (Token(..))
@@ -68,7 +67,7 @@ parseDocstring = peekToken >>= \case
 parseModuleName :: TreeParser (Spanned ModuleName)
 parseModuleName = getToken >>= \case
   TokUpperName n :~ span ->
-    consumeModuleName span span (Text.pack n) <* skipWhitespace
+    consumeModuleName span span n <* skipWhitespace
   other -> parseError (MismatchedToken anyTokUpper other)
   where
     consumeModuleName :: Span -> Span -> Text -> TreeParser (Spanned ModuleName)
@@ -88,7 +87,7 @@ qualifiedIdent start end prefix name = peekToken >>= \case
   where
     acceptUpperName :: (Text -> Span -> TreeParser a) -> TreeParser a
     acceptUpperName f = getToken >>= \case
-      TokUpperName n :~ span -> f (Text.pack n) span
+      TokUpperName n :~ span -> f n span
       other -> parseError (MismatchedToken anyTokUpper other)
 
 -- | Parses exports from a module
@@ -127,9 +126,9 @@ parseExports = do
     exportedLower :: TreeParser (Spanned Export)
     exportedLower = peekToken >>= \case
       TokLowerName n :~ span ->
-        ExportIdent [] (Text.pack n) :~ span <$ skipToken
+        ExportIdent [] n :~ span <$ skipToken
       TokUpperName n :~ span ->
-        skipToken >> qualifiedLower span span [] (Text.pack n)
+        skipToken >> qualifiedLower span span [] n
       other                  ->
         parseError (MismatchedToken anyTokLower other)
 
@@ -137,9 +136,9 @@ parseExports = do
     exportedUpper = getToken >>= \case
       TokUpperName n :~ span -> peekToken >>= \case
         token :~ _ | isWhitespace token || token == TokComma || token == TokRParen ->
-          pure $ ExportIdent [] (Text.pack n) :~ span
+          pure $ ExportIdent [] n :~ span
         TokSymChar '.' :~ _ ->
-          qualifiedUpper span span [] (Text.pack n)
+          qualifiedUpper span span [] n
         other ->
           parseError $ ExpectedOtherToken [tokDot, TokComma, TokRParen, anyTokSpace, TokCrlf] other
       other                  ->
@@ -149,9 +148,9 @@ qualifiedLower :: Span -> Span -> [Text] -> Text -> TreeParser (Spanned Export)
 qualifiedLower start end prefix name =
   accept tokDot >> peekToken >>= \case
     TokLowerName n :~ span ->
-      ExportIdent (prefix ++ [name]) (Text.pack n) :~ (start <> end <> span) <$ skipToken
+      ExportIdent (prefix ++ [name]) n :~ (start <> end <> span) <$ skipToken
     TokUpperName n :~ span ->
-      skipToken >> qualifiedLower (start <> end) span (prefix ++ [name]) (Text.pack n)
+      skipToken >> qualifiedLower (start <> end) span (prefix ++ [name]) n
     other ->
       parseError $ ExpectedOtherToken [anyTokUpper, anyTokLower] other
 
@@ -161,9 +160,9 @@ qualifiedUpper start end prefix name =
     TokUpperName n :~ span ->
       peekToken >>= \case
         token :~ _ | isWhitespace token || token == TokComma || token == TokRParen ->
-          pure $ ExportIdent (prefix ++ [name]) (Text.pack n) :~ (start <> end <> span)
+          pure $ ExportIdent (prefix ++ [name]) n :~ (start <> end <> span)
         TokSymChar '.' :~ _ ->
-          qualifiedUpper (start <> end) span (prefix ++ [name]) (Text.pack n)
+          qualifiedUpper (start <> end) span (prefix ++ [name]) n
         other ->
           parseError $ ExpectedOtherToken [tokDot, TokComma, TokRParen, anyTokSpace, TokCrlf] other
     other ->

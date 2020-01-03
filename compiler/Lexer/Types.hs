@@ -8,11 +8,12 @@ module Lexer.Types
   ) where
 
 import           Prelude
+import           Data.Text (Text)
 
 data Token
   -- Whitespace
-  = TokBlockComment String
-  | TokLineComment String
+  = TokBlockComment Text
+  | TokLineComment Text
   | TokSpace Int
   | TokCrlf
   | TokEof
@@ -31,12 +32,12 @@ data Token
   | TokSymChar Char
   | TokTick
   -- Identifiers
-  | TokUpperName String
-  | TokLowerName String
+  | TokUpperName Text
+  | TokLowerName Text
   -- Literals
   | TokCharLit Char
   | TokIntegerLit Integer
-  | TokStringLit String
+  | TokStringLit Text
   -- Keywords
   | TokAs
   | TokClass
