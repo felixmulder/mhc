@@ -16,19 +16,24 @@ import           Lexer.Types (Token(..))
 import           Lexer.Types (tokDot, anyTokSpace, anyTokUpper, anyTokLower)
 import           Parser.TreeParser (MonadTreeParser(..), ParserError(..), TreeParser)
 import           Parser.TreeParser (parseError)
-import           Parser.ModuleHeader.AST (ModuleHeader(..), ModuleName(..), ModuleExport(..))
+import           Parser.ModuleHeader.AST (ModuleHeader(ModuleHeader), ModuleName(..), ModuleExport(..))
 import           Parser.ModuleHeader.AST (Ident(..), ProperName(..), DataMembers(..), Import(..))
 import           Parser.ModuleHeader.AST (HaskellImport(..), QualifiedName(..))
 
 -- | Parsing a module header from tokens
+--
+-- module := 'module' moduleName exports 'where' imports
 parseModuleHeader :: TreeParser ModuleHeader
 parseModuleHeader = do
   skipWhitespace >> accept TokModule >> skipWhitespace
-  ModuleHeader
-    <$> parseModuleName
-    <*> (parseExports <* accept TokWhere)
-    <*> many parseImport
+  name    <- parseModuleName
+  exports <- parseExports <* accept TokWhere
+  imports <- many parseImport
+  pure $ ModuleHeader name exports imports
 
+-- | Parsing a module name from tokens
+--
+-- moduleName := Upper {'.' moduleName}
 parseModuleName :: TreeParser (Spanned ModuleName)
 parseModuleName = getToken >>= \case
   TokUpperName n :~ span ->
@@ -41,38 +46,41 @@ parseModuleName = getToken >>= \case
       pure $
         ModuleName (QualifiedName (ProperName <$> prefix) (ProperName moduleName)) :~ span
 
-qualifiedIdent :: Span -> Span -> [Text] -> Text -> TreeParser (Spanned ([Text], Text))
-qualifiedIdent start end prefix identName = peekToken >>= \case
-  TokSpace _     :~ span -> (prefix, identName) :~ (start <> end <> span) <$ skipToken
-  TokCrlf        :~ span -> (prefix, identName) :~ (start <> end <> span) <$ skipToken
-  TokEof         :~ span -> pure $ (prefix, identName) :~ (start <> end <> span)
-  TokSymChar '.' :~ span ->
-    skipToken >> acceptUpperName \newName newEnd ->
-      qualifiedIdent (start <> end <> span) newEnd (prefix ++ [identName]) newName
-  other ->
-    parseError $ ExpectedOtherToken [anyTokSpace, TokCrlf, tokDot] other
-  where
-    acceptUpperName :: (Text -> Span -> TreeParser a) -> TreeParser a
-    acceptUpperName f = getToken >>= \case
+    qualifiedIdent :: Span -> Span -> [Text] -> Text -> TreeParser (Spanned ([Text], Text))
+    qualifiedIdent start end prefix identName = peekToken >>= \case
+      TokSpace _     :~ span -> (prefix, identName) :~ (start <> end <> span) <$ skipToken
+      TokCrlf        :~ span -> (prefix, identName) :~ (start <> end <> span) <$ skipToken
+      TokEof         :~ span -> pure $ (prefix, identName) :~ (start <> end <> span)
+      TokSymChar '.' :~ span ->
+        skipToken >> continueWithUpper \newName newEnd ->
+          qualifiedIdent (start <> end <> span) newEnd (prefix ++ [identName]) newName
+      other ->
+        parseError $ ExpectedOtherToken [anyTokSpace, TokCrlf, tokDot] other
+
+    continueWithUpper :: (Text -> Span -> TreeParser a) -> TreeParser a
+    continueWithUpper f = getToken >>= \case
       TokUpperName n :~ span -> f n span
       other -> parseError (MismatchedToken anyTokUpper other)
 
 -- | Parses exports from a module
 --
---   Examples:
+--   exports := '(' [commadExport]* {export} ')'
 --
+--   Supported examples:
 --   @
---   fooBar,
---   FooBar,
---   A.B(),
---   A(B, C, D),
---   A.B(..),
---   TODO:
---   A.B(A.C, A,D),
---   Foo.bar,
---   Foo.Bar,
---   module A.B,
---   module A.B(X),
+--     fooBar,
+--     FooBar,
+--     A.B(),
+--     A(B, C, D),
+--     A.B(..),
+--   @
+--   Examples not implemented:
+--   @
+--     A.B(A.C, A,D),
+--     Foo.bar,
+--     Foo.Bar,
+--     module A.B,
+--     module A.B(X),
 --   @
 parseExports :: TreeParser [Spanned ModuleExport]
 parseExports = do
@@ -107,15 +115,7 @@ parseExports = do
       syms  <- many acceptSymchar
       end   <- accept TokRParen
 
-      let
-        spanToSpan (Just acc) s = Just (acc <> s)
-        spanToSpan Nothing _ = Nothing
-        spanRes =
-          case fmap (\(_ :~ span) -> span) syms of
-            (x : xs) -> foldl' spanToSpan (Just x) xs
-            []       -> Nothing
-
-      case (fmap extract syms, spanRes) of
+      case (fmap extract syms, getSpan <$> sequenceSpan syms) of
         (x : xs, Just symSpan) -> pure $
           MkSymbol (Ident $ pack (x : xs)) :~ (start <> symSpan <> end)
         (_, _) -> parseError $
@@ -162,22 +162,25 @@ parseExports = do
       first <- many (exportedUpper <* accept TokComma <* skipWhitespace)
       lastM <- optional (exportedUpper <* skipWhitespace)
       end   <- accept TokRParen
+
       let
-        spanToSpan (Just acc) s = Just (acc <> s)
-        spanToSpan Nothing _ = Nothing
-        spanRes =
-          case fmap (\(_ :~ span) -> span) first of
-            (x : xs) -> foldl' spanToSpan (Just x) xs
-            []       -> Nothing
+        spanRes = getSpan <$> sequenceSpan first
 
       case (fmap extract $ first <> toList lastM, spanRes) of
         (x : xs, Just memberSpans) -> pure $ Members (x :| xs) :~ (start <> memberSpans <> end)
         (_, _) -> parseError $ DebugError "Members couldn't be parsed from export list"
 
--- HaskellImport ModuleName [ModuleExport] (Maybe ModuleName)
+-- | Parses an import
+--
+-- import := haskellImport
+--
 parseImport :: TreeParser (Spanned Import)
 parseImport = haskellImport
 
+-- | Parses a "legacy" haskell import
+--
+-- haskellImport := 'import' {'qualified'} moduleName {'as' moduleName} exports
+--
 haskellImport :: TreeParser (Spanned Import)
 haskellImport = do
   skipWhitespace
@@ -217,10 +220,15 @@ haskellImport = do
     (Just _, Just span, Nothing, _) ->
       parseError $ MissingAlias span
 
+-- | Turn list of spanned elements into a spanned list
 sequenceSpan :: [Spanned a] -> Maybe (Spanned [a])
 sequenceSpan [] = Nothing
 sequenceSpan (x :~ xSpan : xs) =
   Just $ elems :~ spans
   where
     elems = x : fmap extract xs
-    spans = foldl' (\acc (_ :~ span) -> acc <> span) xSpan xs
+    spans = foldl' (\acc a -> acc <> getSpan a) xSpan xs
+
+-- | Get the span from a spanned value
+getSpan :: Spanned a -> Span
+getSpan (_ :~ span) = span
