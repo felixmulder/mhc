@@ -50,6 +50,7 @@ data Token
   | TokLet
   | TokModule
   | TokNewtype
+  | TokQualified
   | TokType
   | TokWhere
   deriving stock (Eq, Show)

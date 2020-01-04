@@ -1,12 +1,6 @@
 module Parser.ModuleHeader
-  ( Import(..)
-  , ModuleExport(..)
-  , ModuleHeader(..)
-  , ModuleName(..)
-  , QualifiedName(..)
-  , DataMembers(..)
-
-  , parseModuleHeader
+  ( parseModuleHeader
+  , parseImport
   ) where
 
 import           Prelude hiding (span)
@@ -15,75 +9,25 @@ import           Control.Comonad (extract)
 import           Data.Foldable (toList)
 import           Data.List (foldl')
 import           Data.List.NonEmpty (NonEmpty(..))
-import           Data.String (IsString)
 import           Data.Text (Text, pack)
 import           Text.Trifecta (Span, Spanned(..))
 
 import           Lexer.Types (Token(..))
 import           Lexer.Types (tokDot, anyTokSpace, anyTokUpper, anyTokLower)
-import           Parser.TreeParser (MonadTreeParser(..), TreeParser, ParserErrors)
-import           Parser.TreeParser (ParserError(..))
-import           Parser.TreeParser (parseError, runTreeParser, acceptAnySpace)
-
--- | Lower-case identifier
-newtype Ident = Ident Text
-  deriving newtype (Eq, IsString, Show)
-
--- | Proper name e.g. type, class, data
-newtype ProperName = ProperName Text
-  deriving newtype (Eq, IsString, Show)
-
-data QualifiedName a b = QualifiedName [a] b
-  deriving stock (Eq, Show)
-
-newtype ModuleName = ModuleName (QualifiedName ProperName ProperName)
-  deriving newtype (Eq, Show)
-
-data ModuleExport
-  = MkIdent Ident
-  | MkSymbol Ident
-  | MkProperName ProperName
-  | MkDataExport ProperName DataMembers
-  deriving stock (Eq, Show)
-
-data DataMembers
-  = OnlyType -- ''
-  | Wildcard -- '(..)'
-  | Members (NonEmpty ProperName)
-  deriving stock (Eq, Show)
-
-data Import = Import
-  deriving stock (Eq, Show)
-
-data ModuleHeader = ModuleHeader
-  { moduleName :: Spanned ModuleName
-  , exports    :: [Spanned ModuleExport]
-  , imports    :: [Spanned Import]
-  , docstring  :: Maybe Docstring
-  }
-  deriving stock (Eq, Show)
-
-newtype Docstring = Docstring Text
-  deriving newtype (Eq, Show)
+import           Parser.TreeParser (MonadTreeParser(..), ParserError(..), TreeParser)
+import           Parser.TreeParser (parseError)
+import           Parser.ModuleHeader.AST (ModuleHeader(..), ModuleName(..), ModuleExport(..))
+import           Parser.ModuleHeader.AST (Ident(..), ProperName(..), DataMembers(..), Import(..))
+import           Parser.ModuleHeader.AST (HaskellImport(..), QualifiedName(..))
 
 -- | Parsing a module header from tokens
-parseModuleHeader :: [Spanned Token] -> Either ParserErrors ModuleHeader
-parseModuleHeader = runTreeParser $ do
-  skipWhitespace
-  doc <- parseDocstring
-  accept TokModule >> skipWhitespace
+parseModuleHeader :: TreeParser ModuleHeader
+parseModuleHeader = do
+  skipWhitespace >> accept TokModule >> skipWhitespace
   ModuleHeader
     <$> parseModuleName
-    <*> parseExports
-    <*> parseImports
-    <*> pure doc
-
--- | FIXME: currently discards docstring
-parseDocstring :: TreeParser (Maybe Docstring)
-parseDocstring = peekToken >>= \case
-  TokBlockComment _ :~ _ -> skipToken >> skipWhitespace >> parseDocstring
-  TokLineComment _  :~ _ -> skipToken >> skipWhitespace >> parseDocstring
-  _other                 -> pure Nothing
+    <*> (parseExports <* accept TokWhere)
+    <*> many parseImport
 
 parseModuleName :: TreeParser (Spanned ModuleName)
 parseModuleName = getToken >>= \case
@@ -93,17 +37,18 @@ parseModuleName = getToken >>= \case
   where
     consumeModuleName :: Span -> Span -> Text -> TreeParser (Spanned ModuleName)
     consumeModuleName start end n = do
-      (prefix, name) :~ span <- qualifiedIdent start end [] n
+      (prefix, moduleName) :~ span <- qualifiedIdent start end [] n
       pure $
-        ModuleName (QualifiedName (ProperName <$> prefix) (ProperName name)) :~ span
+        ModuleName (QualifiedName (ProperName <$> prefix) (ProperName moduleName)) :~ span
 
 qualifiedIdent :: Span -> Span -> [Text] -> Text -> TreeParser (Spanned ([Text], Text))
-qualifiedIdent start end prefix name = peekToken >>= \case
-  TokSpace _     :~ span -> (prefix, name) :~ (start <> end <> span) <$ skipToken
-  TokCrlf        :~ span -> (prefix, name) :~ (start <> end <> span) <$ skipToken
+qualifiedIdent start end prefix identName = peekToken >>= \case
+  TokSpace _     :~ span -> (prefix, identName) :~ (start <> end <> span) <$ skipToken
+  TokCrlf        :~ span -> (prefix, identName) :~ (start <> end <> span) <$ skipToken
+  TokEof         :~ span -> pure $ (prefix, identName) :~ (start <> end <> span)
   TokSymChar '.' :~ span ->
     skipToken >> acceptUpperName \newName newEnd ->
-      qualifiedIdent (start <> end <> span) newEnd (prefix ++ [name]) newName
+      qualifiedIdent (start <> end <> span) newEnd (prefix ++ [identName]) newName
   other ->
     parseError $ ExpectedOtherToken [anyTokSpace, TokCrlf, tokDot] other
   where
@@ -134,8 +79,7 @@ parseExports = do
   accept TokLParen >> skipWhitespace
   first <- many (commad <* skipWhitespace)
   lastM <- optional (exported <* skipWhitespace)
-  accept TokRParen >> acceptAnySpace >> skipWhitespace
-  accept TokWhere >> skipWhitespace
+  accept TokRParen >> skipWhitespace
   pure (first ++ toList lastM)
 
   where
@@ -192,9 +136,9 @@ parseExports = do
 
     exportedData :: TreeParser (Spanned ModuleExport)
     exportedData = do
-      name :~ nameSpan <- exportedUpper
-      members :~ memSpan <- exportedMembers
-      pure $ MkDataExport name members :~ (nameSpan <> memSpan)
+      dataName :~ nameSpan <- exportedUpper
+      members  :~ memSpan  <- exportedMembers
+      pure $ MkDataExport dataName members :~ (nameSpan <> memSpan)
 
     exportedMembers :: TreeParser (Spanned DataMembers)
     exportedMembers = typeOnly
@@ -230,5 +174,53 @@ parseExports = do
         (x : xs, Just memberSpans) -> pure $ Members (x :| xs) :~ (start <> memberSpans <> end)
         (_, _) -> parseError $ DebugError "Members couldn't be parsed from export list"
 
-parseImports :: TreeParser [Spanned Import]
-parseImports = pure []
+-- HaskellImport ModuleName [ModuleExport] (Maybe ModuleName)
+parseImport :: TreeParser (Spanned Import)
+parseImport = haskellImport
+
+haskellImport :: TreeParser (Spanned Import)
+haskellImport = do
+  skipWhitespace
+  start      <- accept TokImport <* skipWhitespace
+  qualSpanM  <- optional (accept TokQualified <* skipWhitespace)
+  spannedMod <- parseModuleName
+  exps       <- parseExports
+  asM        <- optional (accept TokAs <* skipWhitespace)
+  aliasM     <- optional parseModuleName
+
+  let
+    moduleName :~ moduleSpan = spannedMod
+    imported = fmap extract exps
+    hsImport exs alias = MkHaskellImport (HaskellImport moduleName exs alias)
+
+  case (qualSpanM, asM, aliasM, sequenceSpan exps) of
+    (Nothing, Nothing, Nothing, Just (_ :~ exportSpan)) ->
+      pure $ hsImport imported Nothing :~ (start <> moduleSpan <> exportSpan)
+    (Nothing, Nothing, Nothing, Nothing) ->
+      pure $ hsImport [] Nothing :~ (start <> moduleSpan)
+    (Just qualSpan, Just asSpan, Just (alias :~ aliasSpan), Just (_ :~ exportSpan)) ->
+      pure $ hsImport imported (Just alias) :~ (start <> qualSpan <> asSpan <> aliasSpan <> exportSpan)
+    (Just qualSpan, Just asSpan, Just (alias :~ aliasSpan), Nothing) ->
+      pure $ hsImport imported (Just alias) :~ (start <> qualSpan <> asSpan <> aliasSpan)
+    (Just qualSpan, Nothing, Nothing, Just (_ :~ exportSpan)) ->
+      pure $ hsImport imported (Just moduleName) :~ (start <> qualSpan <> exportSpan)
+    (Just qualSpan, Nothing, Nothing, Nothing) ->
+      pure $ hsImport imported (Just moduleName) :~ (start <> qualSpan)
+    (Nothing, Nothing, Just (_ :~ aliasSpan), _) ->
+      parseError $ UnexpectedAlias aliasSpan
+    (Just _, Nothing, Just (_ :~ aliasSpan), _) ->
+      parseError $ UnexpectedAlias aliasSpan
+    (Nothing, Just _, Just _, _) ->
+      parseError $ MissingQualified moduleSpan
+    (Nothing, Just _, Nothing, _) ->
+      parseError $ MissingQualified moduleSpan
+    (Just _, Just span, Nothing, _) ->
+      parseError $ MissingAlias span
+
+sequenceSpan :: [Spanned a] -> Maybe (Spanned [a])
+sequenceSpan [] = Nothing
+sequenceSpan (x :~ xSpan : xs) =
+  Just $ elems :~ spans
+  where
+    elems = x : fmap extract xs
+    spans = foldl' (\acc (_ :~ span) -> acc <> span) xSpan xs

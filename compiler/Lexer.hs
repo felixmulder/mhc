@@ -1,5 +1,6 @@
 module Lexer
   ( lex
+  , discardComments
   ) where
 
 import           Prelude hiding (lex)
@@ -17,6 +18,12 @@ import           Lexer.Types (Token(..))
 
 lex :: ByteString -> Result [Spanned Token]
 lex = parseByteString lexTokens mempty
+
+discardComments :: [Spanned Token] -> [Spanned Token]
+discardComments xs = xs >>= \case
+  TokBlockComment _ :~ _ -> []
+  TokLineComment _  :~ _ -> []
+  other                  -> [other]
 
 lexTokens :: Parser [Spanned Token]
 lexTokens = do

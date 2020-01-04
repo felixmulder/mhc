@@ -24,11 +24,23 @@ type ParserErrors = [ParserError]
 
 -- | Parser Error
 data ParserError
+  -- | The parser went past EOF token
   = NoTokensLeft
+  -- | Expected a module name, but got other
   | ExpectedModuleName (Spanned Token)
+  -- | Expected one of the tokens from the list but got other
   | ExpectedOtherToken [Token] (Spanned Token)
+  -- | Expected a symbol, but got other
   | ExpectedSymchar (Spanned Token)
+  -- | Expected a different token
   | MismatchedToken Token (Spanned Token)
+  -- | No alias expected, missing @as@?
+  | UnexpectedAlias Span
+  -- | An aliased import is missing the @qualified@ keyword
+  | MissingQualified Span
+  -- | An @as@ keyword is missing the alias after it
+  | MissingAlias Span
+  -- | Internal debug error, if this error is visible, parser bug!
   | DebugError String
   deriving stock (Show, Eq)
 

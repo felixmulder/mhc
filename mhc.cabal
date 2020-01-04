@@ -63,6 +63,7 @@ library compiler
     Lexer.Types
     Parser
     Parser.ModuleHeader
+    Parser.ModuleHeader.AST
     Parser.TreeParser
     Source
 
