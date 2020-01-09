@@ -7,7 +7,7 @@ import           Prelude
 import qualified Data.Set as Set (fromList, singleton)
 import qualified Data.Map.Strict as Map (fromList)
 import           Hedgehog (Property)
-import           Hedgehog (annotate, checkParallel, discover, failure, footnoteShow)
+import           Hedgehog (checkParallel, discover, failure, footnote, footnoteShow)
 import           Hedgehog ((===))
 import           Test.Util (exampleProperty)
 
@@ -96,8 +96,8 @@ prop_check_simple_cycle = exampleProperty do
     Left (DependencyCycles cycles) ->
       cycles === Map.fromList [(aName, [bName]), (bName, [aName])]
     Right res -> do
-      annotate "Expected failure"
       footnoteShow res
+      footnote "Expected failure, but got successful result:"
       failure
 
 tests :: IO Bool
