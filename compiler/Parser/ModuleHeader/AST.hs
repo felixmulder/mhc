@@ -9,7 +9,7 @@ module Parser.ModuleHeader.AST
   , ProperName(..)
   , QualifiedName(..)
 
-  , DependencyCycle(..)
+  , DependencyCycles(..)
   , dependencyList
   ) where
 
@@ -33,7 +33,7 @@ import           Text.Trifecta (Spanned(..))
 --   the list may be compiled in parallel.
 --
 --   Will fail if it detects a cycle
-dependencyList :: [ModuleHeader] -> Either DependencyCycle [Set ModuleName]
+dependencyList :: [ModuleHeader] -> Either DependencyCycles [Set ModuleName]
 dependencyList headers = go (Set.fromList headers) []
   where
     headersWithDeps :: Map ModuleName [ModuleName]
@@ -45,12 +45,12 @@ dependencyList headers = go (Set.fromList headers) []
       xs & fmap \case
         MkHaskellImport (HaskellImport n _ _) :~ _ -> n
 
-    go :: Set ModuleHeader -> [Set ModuleName] -> Either DependencyCycle [Set ModuleName]
+    go :: Set ModuleHeader -> [Set ModuleName] -> Either DependencyCycles [Set ModuleName]
     go modules compilationOrder
       -- No more modules to go through, dependency order established:
       | Set.null modules = Right (reverse compilationOrder)
       -- Getting roots was not possible, a cycle must exist
-      | Set.null roots = Left . DependencyCycle $ Set.toList modules <&> getCycle
+      | Set.null roots = Left . DependencyCycles . Map.fromList $ Set.toList modules <&> getCycle
       -- Still building the list, add roots to compilation order and remove
       -- from modules, rinse repeat
       | otherwise = go (modules \\ roots) (moduleNames roots : compilationOrder)
@@ -77,8 +77,9 @@ dependencyList headers = go (Set.fromList headers) []
           in
             (mName, cycles)
 
-newtype DependencyCycle =
-  DependencyCycle [(ModuleName, [ModuleName])]
+newtype DependencyCycles =
+  DependencyCycles (Map ModuleName [ModuleName])
+  deriving newtype (Show, Eq)
 
 -- | Lower-case identifier
 newtype Ident = Ident Text
