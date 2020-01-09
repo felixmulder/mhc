@@ -71,6 +71,7 @@ library compiler
       base        >=4.12  && <4.13
     , bytestring  >=0.10  && <0.11
     , comonad     >=5.0   && <5.1
+    , containers  >=0.6   && <0.7
     , exceptions  >=0.10  && <0.11
     , ghc         >=8.6   && <8.7
     , text        >=1.2   && <1.3
